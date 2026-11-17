@@ -173,3 +173,11 @@ Cartas de seleção no lançamento manual usam colunas adaptáveis com largura m
 
 Validação desta atualização: 42 testes aprovados, TypeScript e build. Testes de meta incluem migração, validação, chegada exata a 2.000, descontos antes da vitória, múltiplos participantes acima da meta, empate e primeira rodada vencedora. No navegador móvel: toque duplo = 1 carta, toque posterior = 2 cartas; meta customizada de 100 persistida; batida de 100 só ganhou depois de salvar a rodada; modal com confetes, bloqueio de lançamentos, resultado após recarregar e replay da animação. Meta padrão de 2.000 também conferida. A captura da comemoração usa a meta de 100 exclusivamente no teste local. Não foi simulado um teste físico de toque em celular.
 Verificação adicional no navegador: adicionar participantes permanece bloqueado após a vitória; Nova partida confirmou a limpeza do placar e reabilitou a edição da meta, preservando o valor escolhido.
+
+## Seleção pelo quadro e paleta de lavadeira
+
+O quadro inteiro de cada dupla/jogador agora é um botão de seleção acessível por toque, mouse, Enter ou Espaço. O botão antigo Lançar para foi removido. Nome editável e botão Remover mantêm ações próprias, sem selecionar o quadro acidentalmente. A seleção recebe borda e indicação Selecionado; mantém a aba Foto ou Manual escolhida e sincroniza o destinatário da foto com o lançamento manual. A troca de participante não retargeta uma revisão de foto pendente nem um jogo manual em edição: finalize/cancele a foto ou adicione/limpe as cartas primeiro. Partidas concluídas continuam bloqueadas.
+
+Ao escolher Lavadeira de ases, o baralho manual tem exatamente nove opções: A♠ A♥ A♣ A♦ 2♠ 2♥ 2♣ 2♦ Joker. Não há seletor de naipe nesse modo. Os 2 e o Joker são sempre incluídos como coringas na lavadeira; os ases preservam o naipe da opção tocada. A escolha Sequência retorna às 14 opções anteriores e ao seletor de naipe. Tamanho, espaço, proteção contra duplo toque e arraste permanecem.
+
+Validação: TypeScript e build aprovados; navegador confirmou as nove opções, ausência do seletor de naipe e do botão Lançar para, seleção do quadro por teclado, sincronização do alvo da foto, retorno às 14 opções da sequência e proteção de cartas manuais pendentes. A♥ + A♣ + 2♦ foi incluído como lavadeira de 40 pontos para a Dupla 2 selecionada, sem lançar para a Dupla 1.

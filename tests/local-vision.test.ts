@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {cardCodes,decodeCards,groupCardBoxes,groupsFromBoxes,type CardBox} from '../src/localVisionCore.ts';
+import {cardCodes,decodeCards,groupCardBoxes,groupsFromBoxes,scanWindows,aceWindow,mergePasses,type CardBox} from '../src/localVisionCore.ts';
 
 test('matches pinned model class order and maps all ranks/suits',()=>{
  assert.equal(cardCodes.length,52);assert.equal(cardCodes[0],'10C');assert.equal(cardCodes[51],'QS');
@@ -54,4 +54,35 @@ test('keeps duplicate natural cards and leaves invalid fragments for review',()=
  const boxes=[box('3','♣',0,0),box('3','♣',18,0),box('K','♥',400,300)];
  const groups=groupsFromBoxes(boxes,'table');
  assert.equal(groups.length,3);assert.equal(groups.flatMap(g=>g.cards).length,3);
+});
+test('offset stacked aces with a missing middle corner stay together without inventing the missing card',()=>{
+ const aces=[box('A','♦',100,10),box('A','♣',130,90)];
+ assert.equal(groupsFromBoxes(aces,'table').length,1);
+ assert.equal(groupsFromBoxes(aces,'table')[0].cards.length,2);
+ const distant=box('A','♥',400,90);
+ assert.equal(groupsFromBoxes([...aces,distant],'table').length,2);
+});
+test('detailed windows cover the image and ace focus stays inside its bounds',()=>{
+ const windows=scanWindows(1200,800,true);
+ assert.equal(windows.length,5);assert.equal(scanWindows(1200,800,false).length,1);
+ assert.ok(windows.every(w=>w.x>=0&&w.y>=0&&w.x+w.width<=1200&&w.y+w.height<=800));
+ const focus=aceWindow([box('A','♦',5,5)],1200,800)!;
+ assert.equal(focus.x,0);assert.equal(focus.y,0);assert.ok(focus.width>12);
+ assert.equal(aceWindow([box('K','♣',10,10)],1200,800),null);
+});
+test('multiple crops of the same pip count once, but nearby repeated aces remain distinct',()=>{
+ const a=box('A','♣',10,10),b=box('A','♣',29,10);
+ const repeated=mergePasses([[a,b],[{...a,x:11},{...b,x:30}]]);
+ assert.equal(repeated.length,2);
+});
+test('single weak new crop is rejected; repeated moderate readings can recover a missing card',()=>{
+ const weak={...box('A','♣',10,10),probability:.5};
+ assert.deepEqual(mergePasses([[],[weak]]),[]);
+ assert.equal(mergePasses([[],[weak],[{...weak,x:11}]]).length,1);
+ assert.equal(mergePasses([[],[{...weak,probability:.8}]]).length,1);
+});
+test('one conflicting crop cannot override the full photo; two agreeing crops can',()=>{
+ const base=box('3','♣',10,10),other=box('A','♣',10,10);
+ assert.equal(mergePasses([[base],[{...other,probability:.99}]])[0].card.rank,'3');
+ assert.equal(mergePasses([[base],[other],[{...other,x:11}]])[0].card.rank,'A');
 });

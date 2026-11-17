@@ -88,3 +88,13 @@ As imagens não são gravadas por este aplicativo em banco de dados ou no histó
 - Saída estruturada: https://developers.openai.com/api/docs/guides/structured-outputs
 - Funções Node.js na Vercel: https://vercel.com/docs/functions/runtimes/node-js
 - Publicação Vite: https://vite.dev/guide/static-deploy
+
+## Participantes e modos de jogo
+
+A mesa agora aceita mais de duas duplas e partidas individuais. Em Participantes da partida, escolha Duplas ou Cada um por si (contra todos). Use Adicionar dupla ou Adicionar jogador para ampliar a mesa. Os nomes iniciais são Dupla 1, Dupla 2… ou Jogador 1, Jogador 2… e podem ser editados.
+
+É possível incluir participantes após rodadas concluídas: eles entram com zero nas rodadas anteriores. Remover um participante com dados exige confirmação e mantém a associação dos pontos dos demais; os nomes automáticos são renumerados e nomes personalizados são preservados. Trocar o modo com uma partida em andamento exige confirmar o início de uma nova partida. O histórico e a seleção de destinatário da foto acompanham todos os participantes.
+
+Placares antigos Nós/Eles são recuperados como Dupla 1/Dupla 2, com os pontos preservados. Estrutura da mesa fica bloqueada enquanto há foto ou revisão pendente, para evitar associar a foto ao participante errado.
+
+Validação desta atualização: 15 testes de regras, API e participantes; compilação TypeScript e produção; teste de navegador em 390px com 4+ duplas e 6 jogadores, lançamento por foto simulado para Jogador 6, inclusão/remoção, batida única, persistência, migração e histórico com rolagem própria.

@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState,type PointerEvent} from 'react';
 import type {Card} from './rules';
 
-export default function ManualCards({cards,onChange}:{cards:Card[];onChange:(cards:Card[])=>void}){
+export default function ManualCards({cards,effectiveCards,onChange}:{cards:Card[];effectiveCards?:Card[];onChange:(cards:Card[])=>void}){
  const tray=useRef<HTMLDivElement>(null),current=useRef(cards);
  current.current=cards;
  const ids=useRef(new WeakMap<Card,number>()),nextId=useRef(0);
@@ -39,13 +39,14 @@ export default function ManualCards({cards,onChange}:{cards:Card[];onChange:(car
  }
  return <><div className="tray manual-tray" ref={tray} aria-label="Cartas do jogo em edição">
   {!cards.length?<p>Toque nas cartas acima para começar.</p>:cards.map((card,i)=>{
+   const shown=effectiveCards?.[i]||card;
    if(!ids.current.has(card))ids.current.set(card,++nextId.current);
    return <div key={ids.current.get(card)} data-tray-index={i} className={'tray-card'+(moving===card?' dragging':'')}>
-    <button type="button" className="drag-card" aria-label={`Mover ${card.rank} ${card.suit}${card.wild?' coringa':''}, posição ${i+1}`} aria-describedby="manual-drag-help" onPointerDown={e=>start(e,card)} onPointerMove={point} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={()=>{if(drag.current){clearTimeout(drag.current.timer);drag.current=null;setMoving(null);}}} onKeyDown={e=>{
+    <button type="button" className="drag-card" aria-label={`Mover ${card.rank} ${card.suit}${shown.wild?' coringa':''}, posição ${i+1}`} aria-describedby="manual-drag-help" onPointerDown={e=>start(e,card)} onPointerMove={point} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={()=>{if(drag.current){clearTimeout(drag.current.timer);drag.current=null;setMoving(null);}}} onKeyDown={e=>{
      const to=e.key==='ArrowLeft'?i-1:e.key==='ArrowRight'?i+1:e.key==='Home'?0:e.key==='End'?cards.length-1:null;
      if(to!==null){e.preventDefault();move(card,to);}
-    }}>{card.rank}{card.suit}{card.wild?'*':''}<span aria-hidden="true">⠿</span></button>
-    <button type="button" className="remove-tray-card" disabled={moving!==null} aria-label={`Remover ${card.rank} ${card.suit}${card.wild?' coringa':''}, posição ${i+1}`} onClick={()=>onChange(cards.filter((_,j)=>j!==i))}>×</button>
+    }}>{card.rank}{card.suit}{shown.wild?'*':''}<span aria-hidden="true">⠿</span></button>
+    <button type="button" className="remove-tray-card" disabled={moving!==null} aria-label={`Remover ${card.rank} ${card.suit}${shown.wild?' coringa':''}, posição ${i+1}`} onClick={()=>onChange(cards.filter((_,j)=>j!==i))}>×</button>
    </div>;
   })}
  </div><small id="manual-drag-help">Segure e arraste uma carta para mudar sua posição. Use × para remover. No teclado, use as setas ← e →. * indica coringa.</small><span className="sr-only" role="status">{announcement}</span></>;

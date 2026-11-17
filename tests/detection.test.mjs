@@ -40,7 +40,7 @@ test('Envia imagem inline e JSON Schema ao Gemini, com chave só no cabeçalho',
   assert.deepEqual(request.contents[0].parts[1].inlineData,{mimeType:'image/jpeg',data:'/9j/AA=='});
   assert.match(request.contents[0].parts[0].text,/agrupamento físico/);
   assert.equal(request.generationConfig.responseMimeType,'application/json');
-  assert.deepEqual(request.generationConfig.responseJsonSchema,detectionSchema);
+  assert.equal(request.generationConfig.responseJsonSchema,undefined); assert.equal(request.generationConfig.responseSchema.type,"OBJECT"); assert.equal(request.generationConfig.responseSchema.properties.groups.items.properties.cards.items.properties.rank.type,"STRING"); assert.doesNotMatch(JSON.stringify(request.generationConfig.responseSchema),/maxItems|maxLength|additionalProperties/);
   assert.equal(request.generationConfig.maxOutputTokens,10000);
   assert.doesNotMatch(options.body,/fake-gemini-key/);
   return success();

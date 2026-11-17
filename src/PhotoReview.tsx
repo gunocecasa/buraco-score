@@ -3,7 +3,7 @@ import {score,handPoints,type Rules} from './rules';
 import {validateDetection,validRanks,type DetectedCard,type DetectedGroup} from '../shared/detection.js';
 import {recognizeLocally} from './localVision';
 import {groupsFromBoxes,groupCardBoxes,type CardBox} from './localVisionCore';
-type Props={purpose?:'table'|'hand';initialTarget?:number;names:string[];participantLabel:'Dupla'|'Jogador';rules:Rules;onConfirm:(team:number,groups:DetectedGroup[],replace:boolean)=>boolean;onPending:(pending:boolean)=>void};
+type Props={purpose?:'table'|'hand';initialTarget?:number;onTargetChange?:(target:number)=>boolean;names:string[];participantLabel:'Dupla'|'Jogador';rules:Rules;onConfirm:(team:number,groups:DetectedGroup[],replace:boolean)=>boolean;onPending:(pending:boolean)=>void};
 const suits=['♠','♥','♣','♦','?'];
 async function preparePhoto(file:File):Promise<string>{
  if(!file.type.startsWith('image/'))throw new Error('Escolha um arquivo de imagem.');
@@ -20,7 +20,7 @@ async function preparePhoto(file:File):Promise<string>{
   throw new Error('A foto ainda está grande demais. Fotografe uma área menor.');
  }finally{URL.revokeObjectURL(url);}
 }
-export default function PhotoReview({purpose='table',initialTarget=0,names,participantLabel,rules,onConfirm,onPending}:Props){
+export default function PhotoReview({purpose='table',initialTarget=0,onTargetChange,names,participantLabel,rules,onConfirm,onPending}:Props){
  const [target,setTarget]=useState(initialTarget),[image,setImage]=useState(''),[groups,setGroups]=useState<DetectedGroup[]|null>(null),[warnings,setWarnings]=useState<string[]>([]);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[code,setCode]=useState(''),[reviewed,setReviewed]=useState(false),[replace,setReplace]=useState(true);
  const [method,setMethod]=useState<'local'|'gemini'>('local'),[status,setStatus]=useState(''),[boxes,setBoxes]=useState<CardBox[]>([]),[photoSize,setPhotoSize]=useState({width:1,height:1});
@@ -28,6 +28,7 @@ export default function PhotoReview({purpose='table',initialTarget=0,names,parti
  const camera=useRef<HTMLInputElement>(null),gallery=useRef<HTMLInputElement>(null),controller=useRef<AbortController|null>(null),generation=useRef(0);
  const pending=Boolean(image||groups!==null||busy);
  useEffect(()=>{onPending(pending);},[pending,onPending]);
+ useEffect(()=>{if(!pending)setTarget(initialTarget);},[initialTarget,pending]);
  useEffect(()=>()=>{generation.current++;controller.current?.abort();},[]);
  function discard(){generation.current++;controller.current?.abort();setImage('');setGroups(null);setWarnings([]);setReviewed(false);setError('');setBusy(false);setBoxes([]);setStatus('');}
  async function choose(file?:File){
@@ -82,7 +83,7 @@ export default function PhotoReview({purpose='table',initialTarget=0,names,parti
  const valid=Boolean(groups?.length)&&results.every(r=>!r.error);
  const count=groups?.reduce((n,g)=>n+g.cards.length,0)||0;
  return <section className="panel photo-panel" aria-label={purpose==='hand'?'Desconto por foto':'Lançamento por foto'}><div className="eyebrow">CÂMERA + CONFERÊNCIA MANUAL</div><h2>{purpose==='hand'?'Cartas restantes na mão':`Fotografe os jogos ${participantLabel==='Dupla'?'da dupla':'do jogador'}`}</h2><p>{purpose==='hand'?'Fotografe as cartas que sobraram após a batida. Confira a leitura antes de aplicar o desconto.':'Use a foto para preencher os jogos e corrija o que for necessário. Você pode alternar para a aba Manual sem perder esta revisão.'}</p>
- <div className="photo-start"><label>{participantLabel} da foto <select aria-label={participantLabel+' da foto'} disabled={pending||purpose==='hand'} value={target} onChange={e=>setTarget(Number(e.target.value))}>{names.map((n,i)=><option key={i} value={i}>{n||`${participantLabel} ${i+1}`}</option>)}</select></label><button disabled={busy} onClick={()=>{if(groups!==null&&!confirm('Trocar a foto e descartar esta revisão?'))return;camera.current?.click();}}>📷 Tirar foto</button><button disabled={busy} onClick={()=>{if(groups!==null&&!confirm('Trocar a foto e descartar esta revisão?'))return;gallery.current?.click();}}>Escolher da galeria</button></div>
+ <div className="photo-start"><label>{participantLabel} da foto <select aria-label={participantLabel+' da foto'} disabled={pending||purpose==='hand'} value={target} onChange={e=>{const next=Number(e.target.value);if(onTargetChange?.(next)!==false)setTarget(next);}}>{names.map((n,i)=><option key={i} value={i}>{n||`${participantLabel} ${i+1}`}</option>)}</select></label><button disabled={busy} onClick={()=>{if(groups!==null&&!confirm('Trocar a foto e descartar esta revisão?'))return;camera.current?.click();}}>📷 Tirar foto</button><button disabled={busy} onClick={()=>{if(groups!==null&&!confirm('Trocar a foto e descartar esta revisão?'))return;gallery.current?.click();}}>Escolher da galeria</button></div>
  <input ref={camera} className="file-input" type="file" accept="image/*" capture="environment" aria-label={purpose==='hand'?'Tirar foto das cartas restantes':'Tirar foto da mesa'} onChange={e=>{void choose(e.target.files?.[0]);e.target.value='';}}/>
  <input ref={gallery} className="file-input" type="file" accept="image/*" aria-label="Escolher foto da galeria" onChange={e=>{void choose(e.target.files?.[0]);e.target.value='';}}/>
  <small>{purpose==='hand'?'Abra em leque todas as cartas restantes deste participante, deixando os valores visíveis. Não inclua os jogos baixados na mesa.':'Fotografe apenas os jogos do participante selecionado, de cima, com boa luz e valores e naipes visíveis. No computador, escolha uma imagem. Cartas cobertas podem não ser identificadas.'}</small>

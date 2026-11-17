@@ -23,13 +23,13 @@ Extraia o ZIP e abra `ABRIR-BURACO.html` para usar o lançamento manual e conhec
 1. Crie um repositório em https://github.com/new. Envie o conteúdo da pasta extraída, com `package.json` na raiz. Inclua `api`, `shared`, `server`, `src` e os demais arquivos. Não envie o ZIP fechado, `node_modules` nem arquivos com chaves reais.
 2. Importe o repositório em https://vercel.com/new. Selecione Vite, build `npm run build`, saída `dist`, instalação `pnpm install --frozen-lockfile`. Use Node.js 22.18+ ou 24.
 3. Em **Settings → Environment Variables** do projeto Vercel, configure no servidor:
-   - `OPENAI_API_KEY`: sua chave da API OpenAI com acesso a um modelo de visão e créditos disponíveis.
+   - `GEMINI_API_KEY`: sua chave do Gemini criada no Google AI Studio, num projeto da faixa gratuita com cota disponível.
    - `BURACO_ACCESS_CODE`: uma senha escolhida por você, de 12 a 256 caracteres, compartilhada somente com sua mesa.
-   - `OPENAI_VISION_MODEL`: opcional; padrão `gpt-4.1-mini`. O modelo precisa aceitar imagens e JSON Schema na Responses API.
-4. Marque os ambientes desejados e publique novamente (**Redeploy**) após configurar as variáveis. Nunca crie variáveis `VITE_OPENAI_API_KEY` ou inclua a chave no código do navegador.
+   - `GEMINI_MODEL`: opcional; padrão `gemini-3.5-flash-lite`. O modelo precisa aceitar imagens e JSON Schema na Gemini API e ter cota gratuita disponível para sua conta.
+4. Marque os ambientes desejados e publique novamente (**Redeploy**) após configurar as variáveis. Nunca crie variáveis `VITE_GEMINI_API_KEY` ou inclua a chave no código do navegador.
 5. Abra o endereço HTTPS da Vercel no celular. Escolha a dupla, toque em **Tirar foto**, informe o código da mesa e toque em **Reconhecer foto**. Corrija os jogos e confirme.
 
-A leitura por IA pode ter cobrança por uso na conta da API. A chave da API não é a senha da sua conta ChatGPT. Não envie a chave pelo chat nem a publique no GitHub. O código da mesa protege a chamada de reconhecimento e fica só na memória do navegador; ele não é um sistema completo de contas. Para uso público em grande escala, adicione contas, cotas e limitação de uso persistente.
+A integração usa Gemini, com modelo padrão gemini-3.5-flash-lite, que oferece faixa gratuita sujeita aos limites e à disponibilidade da sua conta/região. Crie a chave em https://aistudio.google.com/api-keys, em um projeto da faixa gratuita. O site não ativa faturamento e não troca automaticamente de provedor ou modelo quando a cota acaba. Se você usar um projeto com faturamento pago, as regras de cobrança desse projeto se aplicam: o código não consegue garantir que a conta permaneça gratuita. Não envie a chave pelo chat nem a publique no GitHub. O código da mesa protege a chamada de reconhecimento e fica só na memória do navegador; ele não é um sistema completo de contas. Para uso público em grande escala, adicione contas, cotas e limitação de uso persistente.
 
 Se a chave ou o código não estiver configurado, o site explica que a leitura está indisponível e mantém o lançamento manual. Não retorna resultados fictícios.
 
@@ -73,7 +73,7 @@ As regras podem ser ajustadas em Regras e valores. Alterações valem para a rod
 
 A IA pode errar contagem, naipes, sobreposição e agrupamentos. Fotografe somente a área da dupla selecionada, com boa luz, e deixe os valores/naipes visíveis. A revisão humana é necessária. Não é possível garantir a leitura de cartas cobertas.
 
-As imagens não são gravadas por este aplicativo em banco de dados ou no histórico do navegador. A chamada usa `store: false` na Responses API; isso não equivale a uma garantia de retenção zero pelo provedor. Veja as políticas de dados da sua conta da API. O código não registra fotos, códigos ou chaves em logs próprios.
+As imagens não são gravadas por este aplicativo em banco de dados ou no histórico do navegador. Na faixa gratuita do Gemini, o Google pode usar o conteúdo enviado para melhorar seus produtos, conforme seus termos. Fotografe somente as cartas e confira os termos da sua conta no Google AI Studio. O código não registra fotos, códigos ou chaves em logs próprios.
 
 ## Validação da entrega
 
@@ -84,8 +84,9 @@ As imagens não são gravadas por este aplicativo em banco de dados ou no histó
 
 ## Documentação oficial consultada
 
-- Visão na API OpenAI: https://developers.openai.com/api/docs/guides/images-vision
-- Saída estruturada: https://developers.openai.com/api/docs/guides/structured-outputs
+- Imagens no Gemini: https://ai.google.dev/gemini-api/docs/image-understanding
+- Saída estruturada: https://ai.google.dev/gemini-api/docs/structured-output
+- Faixa gratuita e preços: https://ai.google.dev/gemini-api/docs/pricing
 - Funções Node.js na Vercel: https://vercel.com/docs/functions/runtimes/node-js
 - Publicação Vite: https://vite.dev/guide/static-deploy
 
@@ -111,3 +112,10 @@ Validação: compilação de produção, 19 testes automatizados e fluxo de nave
 
 Na Vercel, a instalação foi alinhada ao pnpm-lock.yaml via vercel.json (pnpm install --frozen-lockfile), evitando a falha de npm ao reutilizar cache do pnpm. Somente o script de instalação do esbuild é autorizado nas dependências.
 
+
+
+## Migração para Gemini
+
+A API de foto agora chama apenas o Gemini com GEMINI_API_KEY, tanto para a mesa quanto para a mão. OPENAI_API_KEY não é mais usada. O código da mesa existente (BURACO_ACCESS_CODE) continua válido. Para ativar, configure GEMINI_API_KEY na Vercel e faça Redeploy. Não use prefixo VITE_ para chaves. O modelo pode ser alterado no servidor por GEMINI_MODEL; padrão gemini-3.5-flash-lite. Quando o limite do Google for atingido, o app mostra o erro e mantém o modo manual, sem trocar automaticamente para um serviço pago.
+
+Validação da migração: 22 testes automatizados, verificação TypeScript e compilação de produção. Testes cobrem imagem inline, JSON Schema, mesa/mão, cota zero/diária, chave inválida, bloqueio e respostas incompletas. Nenhuma chamada real ao Google foi executada antes da configuração da chave; a precisão com fotos reais ainda precisa ser testada na conta do usuário.

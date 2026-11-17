@@ -64,7 +64,7 @@ npm run preview
 - Sequências: 3–13 cartas, mesmo naipe natural e sem repetição; lacunas precisam ser cobertas por coringas. Ás baixo ou alto, sem volta K–A–2.
 - O 2 pode ser natural ou substituto; Joker sempre substituto. A função do 2 sugerida pela IA também precisa de conferência.
 - Valores recuperados do histórico: Ás 15, Joker 20, bônus limpa 200/suja 100/real 500.
-- Outros padrões ajustáveis: 2 = 10; 3–7 = 5; 8–K = 10; batida +100; morto não pego −100. Pontos da mão são informados manualmente como desconto.
+- Outros padrões ajustáveis: 2 = 10; 3–7 = 5; 8–K = 10; batida +100; morto não pego −100. Pontos da mão podem ser digitados ou preenchidos por foto com revisão.
 - Total da rodada = cartas + bônus + batida − morto não pego − mão.
 
 As regras podem ser ajustadas em Regras e valores. Alterações valem para a rodada aberta e não mudam os totais já salvos. Não há verificação automática do limite de baralhos/coringas, exigência de canastra para bater, nem variações especiais do três ou morto pego e não baixado. Combine essas variações com a mesa.
@@ -98,3 +98,12 @@ A mesa agora aceita mais de duas duplas e partidas individuais. Em Participantes
 Placares antigos Nós/Eles são recuperados como Dupla 1/Dupla 2, com os pontos preservados. Estrutura da mesa fica bloqueada enquanto há foto ou revisão pendente, para evitar associar a foto ao participante errado.
 
 Validação desta atualização: 15 testes de regras, API e participantes; compilação TypeScript e produção; teste de navegador em 390px com 4+ duplas e 6 jogadores, lançamento por foto simulado para Jogador 6, inclusão/remoção, batida única, persistência, migração e histórico com rolagem própria.
+
+
+## Foto das cartas restantes na mão
+
+Em Rodada em andamento, cada participante tem o botão Fotografar mão, junto do campo Pontos restantes na mão. A câmera ou galeria abre uma revisão separada, associada ao participante escolhido. Fotografe somente as cartas que sobraram após a batida, com os valores visíveis.
+
+A IA identifica as cartas; você pode corrigir valores e naipes, remover extras e adicionar faltantes. A mão não precisa formar jogos: uma carta é válida e não há bônus de canastra. O desconto usa os valores individuais configurados em Regras e valores. Naipe desconhecido não impede o desconto se o valor estiver definido. Ao confirmar, o total substitui o desconto anterior deste participante, sem acumular e sem alterar os jogos da mesa, a batida ou o morto. Você ainda pode editar o total manualmente.
+
+Validação: compilação de produção, 19 testes automatizados e fluxo de navegador com IA simulada: corrigir, adicionar e remover cartas; substituir desconto manual de 80 por 50; repetir foto mantendo desconto de 50; fechar rodada com −50 para uma dupla e +100 de batida para outra. O reconhecimento com fotos reais continua dependendo do serviço de IA configurado na Vercel.

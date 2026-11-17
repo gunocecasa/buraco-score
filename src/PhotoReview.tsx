@@ -1,6 +1,8 @@
 import {useEffect,useRef,useState} from 'react';
 import {score,handPoints,type Rules} from './rules';
 import {validateDetection,validRanks,type DetectedCard,type DetectedGroup} from '../shared/detection.js';
+import {recognizeLocally} from './localVision';
+import type {CardBox} from './localVisionCore';
 type Props={purpose?:'table'|'hand';initialTarget?:number;names:string[];participantLabel:'Dupla'|'Jogador';rules:Rules;onConfirm:(team:number,groups:DetectedGroup[],replace:boolean)=>boolean;onPending:(pending:boolean)=>void};
 const suits=['♠','♥','♣','♦','?'];
 async function preparePhoto(file:File):Promise<string>{
@@ -21,19 +23,32 @@ async function preparePhoto(file:File):Promise<string>{
 export default function PhotoReview({purpose='table',initialTarget=0,names,participantLabel,rules,onConfirm,onPending}:Props){
  const [target,setTarget]=useState(initialTarget),[image,setImage]=useState(''),[groups,setGroups]=useState<DetectedGroup[]|null>(null),[warnings,setWarnings]=useState<string[]>([]);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[code,setCode]=useState(''),[reviewed,setReviewed]=useState(false),[replace,setReplace]=useState(true);
+ const [method,setMethod]=useState<'local'|'gemini'>('local'),[status,setStatus]=useState(''),[boxes,setBoxes]=useState<CardBox[]>([]),[photoSize,setPhotoSize]=useState({width:1,height:1});
  const camera=useRef<HTMLInputElement>(null),gallery=useRef<HTMLInputElement>(null),controller=useRef<AbortController|null>(null),generation=useRef(0);
  const pending=Boolean(image||groups!==null||busy);
  useEffect(()=>{onPending(pending);},[pending,onPending]);
  useEffect(()=>()=>{generation.current++;controller.current?.abort();},[]);
- function discard(){generation.current++;controller.current?.abort();setImage('');setGroups(null);setWarnings([]);setReviewed(false);setError('');setBusy(false);}
+ function discard(){generation.current++;controller.current?.abort();setImage('');setGroups(null);setWarnings([]);setReviewed(false);setError('');setBusy(false);setBoxes([]);setStatus('');}
  async function choose(file?:File){
   if(!file)return;
-  const run=++generation.current;setBusy(true);setError('');setGroups(null);setWarnings([]);setImage('');setReviewed(false);
+  const run=++generation.current;setBusy(true);setError('');setGroups(null);setWarnings([]);setImage('');setReviewed(false);setBoxes([]);setStatus('Preparando foto…');
   try{const data=await preparePhoto(file);if(run===generation.current)setImage(data);}catch(e){if(run===generation.current)setError((e as Error).message);}finally{if(run===generation.current)setBusy(false);}
  }
  async function recognize(){
   if(!image||busy)return;
   if(groups!==null&&!confirm('Analisar novamente e substituir as correções desta revisão?'))return;
+  if(method==='local'){
+   const run=++generation.current;controller.current=new AbortController();setBusy(true);setError('');setReviewed(false);setStatus('Preparando leitor no aparelho…');
+   try{
+    const found=await recognizeLocally(image,controller.current.signal,message=>{if(run===generation.current)setStatus(message);});
+    if(run===generation.current){
+     setBoxes(found);setGroups(found.length?[{kind:'sequence',cards:found.map(box=>box.card)}]:[]);
+     setWarnings(['Leitura local experimental: confira todas as cartas. Coringas impressos não são reconhecidos; 2 entra como coringa por padrão; desmarque se for um 2 natural.',purpose==='table'?'As cartas foram colocadas em um único jogo. Separe os jogos com “Adicionar jogo” e “Mover para”, ou fotografe um jogo por vez.':'Confira se cada carta aparece uma única vez antes de aplicar o desconto.','O leitor identifica cantos: se os dois cantos da mesma carta aparecerem, ela pode ser contada duas vezes. Remova as repetições.']);
+    }
+   }catch(e){if(run===generation.current)setError((e as Error).name==='AbortError'?'Leitura cancelada.':(e as Error).message);}
+   finally{if(run===generation.current)setBusy(false);}
+   return;
+  }
   if(location.protocol==='file:'){setError('A leitura por IA precisa do site publicado ou do servidor local. Aqui você pode continuar com o lançamento manual.');return;}
   if(code.length<12){setError('Informe o código da mesa fornecido por quem publicou o site.');return;}
   const run=++generation.current;controller.current=new AbortController();const active=controller.current;setBusy(true);setError('');setReviewed(false);
@@ -43,6 +58,7 @@ export default function PhotoReview({purpose='table',initialTarget=0,names,parti
    let result;try{result=await response.json();}catch{throw new Error('O reconhecimento não está disponível neste endereço. Use o site publicado com a função de foto configurada.');}
    if(!response.ok)throw new Error(typeof result.error==='string'?result.error:'Não foi possível reconhecer a imagem.');
    const detection=validateDetection(result);
+   for(const group of detection.groups)for(const card of group.cards)if(card.rank==='2')card.wild=true;
    if(run===generation.current){setGroups(purpose==='hand'?[{kind:'sequence',cards:detection.groups.flatMap(g=>g.cards)}]:detection.groups);setWarnings(detection.warnings);}
   }catch(e){if(run===generation.current)setError((e as Error).name==='AbortError'?'Análise interrompida ou tempo esgotado. Tente novamente.':(e as Error).message);}
   finally{clearTimeout(timeout);if(run===generation.current)setBusy(false);}
@@ -52,7 +68,7 @@ export default function PhotoReview({purpose='table',initialTarget=0,names,parti
   if(!groups)return;
   edit(groups.map((g,i)=>i!==groupIndex?g:{...g,cards:g.cards.map((c,j)=>{
    if(j!==cardIndex)return c;const next={...c,...patch,confidence:'high' as const};
-   if(next.rank==='Joker'){next.wild=true;next.suit='';}else{if(next.suit==='')next.suit='?';if(next.rank!=='2')next.wild=false;}
+   if(next.rank==='Joker'){next.wild=true;next.suit='';}else{if(next.suit==='')next.suit='?';if(next.rank!=='2')next.wild=false;else if(patch.rank==='2')next.wild=true;}
    return next;
   })}));
  }
@@ -68,8 +84,8 @@ export default function PhotoReview({purpose='table',initialTarget=0,names,parti
  <input ref={camera} className="file-input" type="file" accept="image/*" capture="environment" aria-label={purpose==='hand'?'Tirar foto das cartas restantes':'Tirar foto da mesa'} onChange={e=>{void choose(e.target.files?.[0]);e.target.value='';}}/>
  <input ref={gallery} className="file-input" type="file" accept="image/*" aria-label="Escolher foto da galeria" onChange={e=>{void choose(e.target.files?.[0]);e.target.value='';}}/>
  <small>{purpose==='hand'?'Abra em leque todas as cartas restantes deste participante, deixando os valores visíveis. Não inclua os jogos baixados na mesa.':'Fotografe apenas os jogos do participante selecionado, de cima, com boa luz e valores e naipes visíveis. No computador, escolha uma imagem. Cartas cobertas podem não ser identificadas.'}</small>
- {image&&<div className="photo-workspace"><img className="table-photo" src={image} alt={`${purpose==='hand'?'Foto da mão':'Foto da mesa'} de ${names[target]||`${participantLabel} ${target+1}`}`}/><div><h3>{names[target]||`${participantLabel} ${target+1}`}</h3><p>A imagem será enviada ao Gemini (Google) quando você tocar em reconhecer. Na faixa gratuita, o Google pode usar o conteúdo para melhorar seus produtos. A foto não entra no histórico da partida.</p><label className="access-label">Código da mesa <input type="password" autoComplete="off" value={code} onChange={e=>setCode(e.target.value)} placeholder="Fornecido por quem publicou" maxLength={256}/></label><div className="actions"><button className="primary" disabled={busy} onClick={()=>void recognize()}>{busy?'Analisando…':groups===null?'Reconhecer foto':'Analisar novamente'}</button></div>{groups===null&&<button className="text-button" disabled={busy} onClick={()=>{edit([{kind:'sequence',cards:[]}]);setWarnings(['Modo de revisão manual: nenhuma carta foi reconhecida automaticamente.']);}}>Preencher manualmente usando a foto</button>}</div></div>}
- {busy&&<p role="status">Preparando ou analisando a foto. Você poderá conferir tudo antes de lançar.</p>}
+  {image&&<div className="photo-workspace"><div className="local-photo"><img className="table-photo" src={image} onLoad={e=>setPhotoSize({width:e.currentTarget.naturalWidth,height:e.currentTarget.naturalHeight})} alt={`${purpose==='hand'?'Foto da mão':'Foto da mesa'} de ${names[target]||`${participantLabel} ${target+1}`}`}/>{boxes.length>0&&<svg className="local-boxes" viewBox={`0 0 ${photoSize.width} ${photoSize.height}`} aria-label="Cantos identificados na foto">{boxes.map((b,i)=><g key={i}><rect x={b.x} y={b.y} width={b.width} height={b.height}/><text x={b.x} y={Math.max(16,b.y-3)}>{i+1}: {b.card.rank}{b.card.suit}</text></g>)}</svg>}</div><div><h3>{names[target]||`${participantLabel} ${target+1}`}</h3><label>Como reconhecer?<select aria-label="Como reconhecer a foto" disabled={busy} value={method} onChange={e=>{setMethod(e.target.value as 'local'|'gemini');setError('');}}><option value="local">No aparelho · experimental</option><option value="gemini">Gemini · enviar foto ao Google</option></select></label>{method==='local'?<><p>A foto é analisada neste aparelho, sem envio ao Gemini e sem cobrança por leitura. No primeiro uso, o site baixa um leitor de 38 MB e arquivos de funcionamento. A conexão ainda é necessária para carregar esses arquivos.</p><p>Para começar, fotografe um jogo por vez, com valores e naipes grandes e visíveis. Deixe apenas um canto de cada carta visível para evitar repetições.</p><small>Leitor de cartas <a href="https://huggingface.co/sroot/lgd-cards-gen3/tree/b2e9e89cc0138a70fc3ac5661922f99b4e3ae135" target="_blank" rel="noreferrer">LGD / TechTools (modelo e fontes, AGPL-3.0)</a>. <a href="https://github.com/gunocecasa/buraco-score" target="_blank" rel="noreferrer">Código do site</a>.</small></>:<><p>A imagem será enviada ao Gemini (Google) quando você tocar em reconhecer. Na faixa gratuita, o Google pode usar o conteúdo para melhorar seus produtos. A foto não entra no histórico da partida.</p><label className="access-label">Código da mesa <input type="password" autoComplete="off" value={code} onChange={e=>setCode(e.target.value)} placeholder="Fornecido por quem publicou" maxLength={256}/></label></>}<div className="actions"><button className="primary" disabled={busy} onClick={()=>void recognize()}>{busy?'Analisando…':groups===null?method==='local'?'Reconhecer no aparelho':'Reconhecer foto':'Analisar novamente'}</button></div>{groups===null&&<button className="text-button" disabled={busy} onClick={()=>{edit([{kind:'sequence',cards:[]}]);setWarnings(['Modo de revisão manual: nenhuma carta foi reconhecida automaticamente.']);}}>Preencher manualmente usando a foto</button>}</div></div>}
+ {busy&&<p role="status">{method==='local'?status:'Preparando ou analisando a foto. Você poderá conferir tudo antes de lançar.'}</p>}
  {error&&<p role="alert" className="warning">{error}</p>}
  {groups!==null&&<div className="photo-review"><h3>{purpose==='hand'?'Confira a mão':'Confira os jogos'} · {count} cartas</h3><p>{purpose==='hand'?'Corrija os valores, remova cartas extras e acrescente as que faltaram. O desconto é a soma das cartas, sem bônus de canastra.':'Você pode mudar valores, naipes, coringas e agrupamento. Remova cartas a mais e acrescente as que faltaram.'}</p>{warnings.length>0&&<ul className="warning">{warnings.map((w,i)=><li key={i}>{w}</li>)}</ul>}{!groups.length&&<p>Nenhum jogo detectado. Tente outra foto ou adicione um jogo e preencha as cartas.</p>}
  {groups.map((g,i)=><section className="detected-game" key={i}><div className="review-game-header"><h3>{purpose==='hand'?'Cartas da mão':`Jogo ${i+1}`}</h3>{purpose==='table'&&<><label>Tipo <select aria-label={`Tipo do jogo ${i+1}`} value={g.kind} onChange={e=>edit(groups.map((item,j)=>j===i?{...item,kind:e.target.value as DetectedGroup['kind']}:item))}><option value="sequence">Sequência</option><option value="lavadeira">Lavadeira de ases</option></select></label><button onClick={()=>edit(groups.filter((_,j)=>j!==i))}>Remover jogo</button></>}</div>

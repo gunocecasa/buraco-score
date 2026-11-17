@@ -1,14 +1,15 @@
 import {defaults,type Rules} from './rules.ts';
+import {defaultTarget,validTarget} from './match.ts';
 
 export type Mode='teams'|'individual';
 export type Round={id:string;names:string[];totals:number[]};
-export type Saved={mode:Mode;names:string[];rules:Rules;history:Round[]};
+export type Saved={mode:Mode;names:string[];rules:Rules;history:Round[];target:number};
 export const participantLabel=(mode:Mode)=>mode==='teams'?'Dupla':'Jogador';
 export const defaultName=(mode:Mode,index:number)=>`${participantLabel(mode)} ${index+1}`;
 export const defaultNames=(mode:Mode,count=2)=>Array.from({length:count},(_,i)=>defaultName(mode,i));
 
 export function restoreSaved(value:unknown):Saved {
- const fallback:Saved={mode:'teams',names:defaultNames('teams'),rules:{...defaults},history:[]};
+ const fallback:Saved={mode:'teams',names:defaultNames('teams'),rules:{...defaults},history:[],target:defaultTarget};
  if(!value||typeof value!=='object')return fallback;
  const s=value as Partial<Saved>;
  if(!Array.isArray(s.names)||s.names.length<2||!s.names.every(n=>typeof n==='string')||
@@ -16,7 +17,7 @@ export function restoreSaved(value:unknown):Saved {
  !s.rules||!Object.keys(defaults).every(k=>Number.isFinite(s.rules![k as keyof Rules])))return fallback;
  const mode:Mode=s.mode==='individual'?'individual':'teams';
  const names=!s.mode&&s.names.length===2&&s.names[0]==='Nós'&&s.names[1]==='Eles'?defaultNames(mode):[...s.names];
- return {mode,names,rules:{...s.rules},history:s.history.map(h=>({...h,names:[...h.names],totals:[...h.totals]}))};
+ return {mode,names,rules:{...s.rules},history:s.history.map(h=>({...h,names:[...h.names],totals:[...h.totals]})),target:validTarget(s.target)?s.target:defaultTarget};
 }
 
 export function addParticipant(names:string[],history:Round[],mode:Mode){

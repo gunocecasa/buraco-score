@@ -6,19 +6,21 @@ const handPrompt=`Identifique TODAS as cartas restantes na mão de um único par
 function reply(res,status,body){res.statusCode=status;res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.end(JSON.stringify(body));}
 async function providerFailure(response){
  let detail;try{detail=(await response.json())?.error;}catch{}
- const code=typeof detail?.code==='string'?detail.code:'';
- const type=typeof detail?.type==='string'?detail.type:'';
- // Não devolva a mensagem bruta do provedor: ela pode incluir identificadores ou dados da chave.
- if(['project_spend_limit_exceeded','organization_spend_limit_exceeded','organization_usage_limit_exceeded','billing_hard_limit_reached','usage_limit_reached'].includes(code))return {status:429,body:{code:'AI_SPEND_LIMIT',error:'A conta ou o projeto da API OpenAI atingiu um limite de gastos ou de uso. Quem publicou o site precisa conferir os limites na plataforma OpenAI. Apenas aguardar e tentar novamente pode não resolver.'}};
- if(code==='credit_balance_exhausted'||code==='billing_not_active'||response.status===402)return {status:429,body:{code:'AI_CREDITS',error:'A conta da API OpenAI está sem créditos disponíveis ou sem faturamento ativo. Quem publicou o site precisa conferir Billing na plataforma OpenAI. Criar a chave, por si só, não ativa créditos. Aguardar e tentar novamente não resolve falta de saldo.'}};
- if(code==='insufficient_quota'||type==='insufficient_quota')return {status:429,body:{code:'AI_QUOTA',error:'A API OpenAI informou falta de cota disponível. Quem publicou o site precisa conferir créditos, faturamento e limites na plataforma OpenAI, na mesma conta/projeto da chave usada no site. Apenas criar a chave ou tentar novamente não garante acesso.'}};
+ const details=Array.isArray(detail?.details)?detail.details:[];
+ const reasons=details.map(d=>d.reason).filter(r=>typeof r==='string');
+ // Mensagens do provedor podem conter identificadores: devolva somente mensagens próprias.
+ if(response.status===401||reasons.includes('API_KEY_INVALID')||reasons.includes('API_KEY_EXPIRED'))return {status:502,body:{code:'GEMINI_KEY',error:'A chave do Gemini configurada no servidor não foi aceita. Quem publicou o site precisa conferir GEMINI_API_KEY na Vercel. O código da mesa é uma senha diferente.'}};
+ if(response.status===403)return {status:502,body:{code:'GEMINI_ACCESS',error:'O Google não autorizou esta chave, projeto ou modelo. Quem publicou o site precisa conferir as permissões da chave e o acesso no Google AI Studio.'}};
+ if(response.status===404)return {status:502,body:{code:'GEMINI_MODEL',error:'O modelo Gemini configurado não está disponível para esta chave. Quem publicou o site precisa escolher um modelo de visão disponível na faixa gratuita da sua conta.'}};
  if(response.status===429){
-  const temporary=['rate_limit_exceeded','slow_down'].includes(code)||['rate_limit_error','rate_limit_exceeded'].includes(type);
-  return {status:429,body:{code:temporary?'AI_RATE_LIMIT':'AI_USAGE_LIMIT',error:temporary?'A API OpenAI atingiu um limite temporário de solicitações ou tokens. Aguarde um pouco antes de reconhecer novamente.':'A API OpenAI recusou a análise por um limite de uso. Quem publicou o site precisa conferir créditos e limites na plataforma OpenAI; o serviço não detalhou se o bloqueio é temporário.'}};
+  const violations=details.flatMap(d=>Array.isArray(d.violations)?d.violations:[]);
+  if(violations.some(v=>String(v.quotaValue)==='0'))return {status:429,body:{code:'GEMINI_QUOTA_UNAVAILABLE',error:'O Google informou cota zero para este modelo ou projeto. Confira no Google AI Studio se sua chave tem acesso à faixa gratuita deste modelo. O site não muda automaticamente para um serviço pago.'}};
+  const daily=violations.some(v=>/perday|per_day|daily/i.test(String(v.quotaId||'')+' '+String(v.quotaMetric||'')));
+  return {status:429,body:{code:daily?'GEMINI_DAILY_LIMIT':'GEMINI_RATE_LIMIT',error:daily?'A cota diária do Gemini foi atingida. Aguarde a renovação da cota do Google para reconhecer novas fotos, ou continue no modo manual.':'O Gemini atingiu um limite de uso. Aguarde um pouco e tente novamente; se persistir, confira a cota disponível no Google AI Studio. O modo manual continua disponível.'}};
  }
- if(response.status===401)return {status:502,body:{code:'AI_KEY',error:'A chave da API OpenAI configurada no servidor não foi aceita. Quem publicou o site precisa conferir OPENAI_API_KEY na Vercel. O código da mesa é uma senha diferente.'}};
- if(response.status===403||response.status===404)return {status:502,body:{code:'AI_ACCESS',error:'A conta da API não tem acesso ao modelo configurado, ou o modelo não está disponível. Quem publicou o site precisa conferir o acesso ao modelo na plataforma OpenAI.'}};
- return {status:502,body:{code:'AI_UNAVAILABLE',error:'O serviço de IA não pôde analisar a foto. Tente novamente mais tarde ou use o lançamento manual. Se persistir, quem publicou o site precisa verificar a configuração do serviço.'}};
+ if(response.status===400&&detail?.status==='FAILED_PRECONDITION')return {status:502,body:{code:'GEMINI_ACCOUNT',error:'O Google informou que este projeto não atende aos requisitos para usar o modelo. Confira a disponibilidade da faixa gratuita para sua conta e região no Google AI Studio.'}};
+ if(response.status===400)return {status:502,body:{code:'GEMINI_REQUEST',error:'O Gemini não aceitou a solicitação. Tente outra foto; se persistir, quem publicou o site precisa conferir o modelo e a configuração da integração.'}};
+ return {status:502,body:{code:'GEMINI_UNAVAILABLE',error:'O Gemini não está disponível no momento. Tente novamente mais tarde ou use o lançamento manual.'}};
 }
 function sameSecret(a,b){if(typeof a!=='string'||a.length>256)return false;const aa=Buffer.from(a),bb=Buffer.from(b);return aa.length===bb.length&&timingSafeEqual(aa,bb);}
 async function readBody(req){
@@ -27,7 +29,10 @@ async function readBody(req){
 }
 export function createHandler({env=process.env,fetchImpl=fetch}={}) {return async function handler(req,res){
  if(req.method!=='POST'){res.setHeader('Allow','POST');return reply(res,405,{error:'Use o botão Reconhecer foto para enviar uma imagem.'});}
- if(!env.OPENAI_API_KEY||!env.BURACO_ACCESS_CODE||env.BURACO_ACCESS_CODE.length<12)return reply(res,503,{error:'O reconhecimento ainda não foi ativado. Configure a chave de IA e o código da mesa no servidor. O lançamento manual continua disponível.'});
+ if(!env.GEMINI_API_KEY)return reply(res,503,{code:'GEMINI_NOT_CONFIGURED',error:'O reconhecimento com Gemini ainda não foi ativado. Quem publicou o site precisa configurar GEMINI_API_KEY na Vercel. O lançamento manual continua disponível.'});
+ if(!env.BURACO_ACCESS_CODE||env.BURACO_ACCESS_CODE.length<12)return reply(res,503,{error:'Configure o código da mesa no servidor com pelo menos 12 caracteres.'});
+ const model=env.GEMINI_MODEL||'gemini-3.5-flash-lite';
+ if(!/^gemini-[A-Za-z0-9._-]+$/.test(model))return reply(res,503,{code:'GEMINI_MODEL',error:'O nome do modelo Gemini configurado é inválido. Confira GEMINI_MODEL na Vercel.'});
  if(!sameSecret(req.headers['x-mesa-code'],env.BURACO_ACCESS_CODE))return reply(res,401,{error:'Código da mesa incorreto. Confira com quem publicou o site.'});
  if(!String(req.headers['content-type']||'').startsWith('application/json'))return reply(res,415,{error:'Envie uma imagem pelo botão da câmera.'});
  let body;try{body=await readBody(req);}catch(e){return reply(res,e.message==='LARGE'?413:400,{error:e.message==='LARGE'?'Imagem muito grande. Tire outra foto mais próxima.':'Não foi possível ler a imagem enviada.'});}
@@ -41,13 +46,13 @@ export function createHandler({env=process.env,fetchImpl=fetch}={}) {return asyn
  const signature=mime==='image/jpeg'?raw[0]===255&&raw[1]===216&&raw[2]===255:mime==='image/png'?raw.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):raw.toString('ascii',0,4)==='RIFF'&&raw.toString('ascii',8,12)==='WEBP';
  if(!signature)return reply(res,400,{error:'Arquivo de imagem inválido.'});
  try{
-  const upstream=await fetchImpl('https://api.openai.com/v1/responses',{method:'POST',signal:AbortSignal.timeout(55_000),headers:{'Authorization':`Bearer ${env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({model:env.OPENAI_VISION_MODEL||'gpt-4.1-mini',store:false,max_output_tokens:10000,input:[{role:'user',content:[{type:'input_text',text:purpose==='hand'?handPrompt:prompt},{type:'input_image',image_url:image,detail:'high'}]}],text:{format:{type:'json_schema',name:'buraco_table',strict:true,schema:detectionSchema}}})});
+  const upstream=await fetchImpl('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{method:'POST',signal:AbortSignal.timeout(55_000),headers:{'x-goog-api-key':env.GEMINI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:purpose==='hand'?handPrompt:prompt},{inlineData:{mimeType:mime,data:image.split(',')[1]}}]}],generationConfig:{responseMimeType:'application/json',responseJsonSchema:detectionSchema,maxOutputTokens:10000}})});
   if(!upstream.ok){const failure=await providerFailure(upstream);return reply(res,failure.status,failure.body);}
   const data=await upstream.json();
-  if(data.status!=='completed')return reply(res,502,{error:'A análise não terminou. Tente uma foto com menos jogos.'});
-  const content=(data.output||[]).filter(o=>o.type==='message').flatMap(o=>o.content||[]);
-  if(content.some(c=>c.type==='refusal'))return reply(res,422,{error:'Não foi possível reconhecer esta imagem. Fotografe apenas as cartas do participante.'});
-  const text=content.filter(c=>c.type==='output_text').map(c=>c.text).join('');
+  const candidate=data.candidates?.[0];
+  if(data.promptFeedback?.blockReason||(candidate?.finishReason&& !['STOP','MAX_TOKENS'].includes(candidate.finishReason)))return reply(res,422,{code:'GEMINI_BLOCKED',error:'O Gemini não conseguiu analisar esta imagem. Fotografe somente as cartas do participante e tente novamente.'});
+  if(!candidate||candidate.finishReason!=='STOP')return reply(res,502,{code:'GEMINI_INCOMPLETE',error:'A análise do Gemini não terminou. Tente uma foto com menos cartas.'});
+  const text=(candidate.content?.parts||[]).filter(part=>typeof part.text==='string'&&!part.thought).map(part=>part.text).join('');
   const detection=validateDetection(JSON.parse(text));
   return reply(res,200,detection);
  }catch(e){return reply(res,502,{error:['TimeoutError','AbortError'].includes(e.name)?'A análise demorou demais. Tente novamente ou lance as cartas manualmente.':'Não foi possível interpretar a foto. Tente outra imagem ou use o lançamento manual.'});}

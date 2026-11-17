@@ -45,3 +45,13 @@ test('Recusa, limite, resposta incompleta e dados inválidos geram erros recuper
  ])assert.equal((await call(createHandler({env,fetchImpl:async()=>response}))).statusCode,status);
  const timed=await call(createHandler({env,fetchImpl:async()=>{const e=new Error();e.name='TimeoutError';throw e;}}));assert.match(timed.body.error,/demorou/);
 });
+test('Foto da mão usa instruções próprias e preserva cartas sem montar jogos',async()=>{
+ let calls=0;
+ const handler=createHandler({env,fetchImpl:async(url,options)=>{
+  calls++;const request=JSON.parse(options.body);const prompt=request.input[0].content[0].text;
+  assert.match(prompt,/restantes na mão/);assert.match(prompt,/Não tente formar sequências ou canastras/);
+  return {ok:true,json:async()=>({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({groups:[{kind:'sequence',cards:[{rank:'K',suit:'♠',wild:false,confidence:'high'}]}],warnings:[]})}]}]})};
+ }});
+ const result=await call(handler,{body:{image,purpose:'hand'}});assert.equal(result.statusCode,200);assert.equal(result.body.groups[0].cards[0].rank,'K');
+ assert.equal((await call(handler,{body:{image,purpose:'other'}})).statusCode,400);assert.equal(calls,1);
+});

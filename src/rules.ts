@@ -3,6 +3,10 @@ export type Card = {rank: string; suit: string; wild: boolean};
 export type Rules = {ace:number; two:number; low:number; high:number; joker:number; clean:number; dirty:number; real:number; out:number; dead:number};
 export const defaults: Rules = {ace:15,two:10,low:5,high:10,joker:20,clean:200,dirty:100,real:500,out:100,dead:100};
 export function cardValue(card:Card,r:Rules):number {return card.rank==='Joker'?r.joker:card.rank==='A'?r.ace:card.rank==='2'?r.two:['3','4','5','6','7'].includes(card.rank)?r.low:r.high;}
+export function handPoints(cards:Card[],r:Rules=defaults):number {
+ if(cards.some(c=>c.rank!=='Joker'&&!ranks.includes(c.rank as typeof ranks[number])))throw new Error('Corrija as cartas com valor desconhecido antes de confirmar o desconto.');
+ return cards.reduce((total,card)=>total+cardValue(card,r),0);
+}
 export function score(cards:Card[],kind:'sequence'|'lavadeira',r:Rules=defaults) {
  if(cards.length<3) throw new Error('Adicione pelo menos 3 cartas.');
  const naturals=cards.filter(c=>!c.wild);

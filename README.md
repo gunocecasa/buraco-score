@@ -21,7 +21,7 @@ Extraia o ZIP e abra `ABRIR-BURACO.html` para usar o lançamento manual e conhec
 ## Ativar a leitura por foto na Vercel
 
 1. Crie um repositório em https://github.com/new. Envie o conteúdo da pasta extraída, com `package.json` na raiz. Inclua `api`, `shared`, `server`, `src` e os demais arquivos. Não envie o ZIP fechado, `node_modules` nem arquivos com chaves reais.
-2. Importe o repositório em https://vercel.com/new. Selecione Vite, build `npm run build`, saída `dist`, instalação `npm install`. Use Node.js 22.18+ ou 24.
+2. Importe o repositório em https://vercel.com/new. Selecione Vite, build `npm run build`, saída `dist`, instalação `pnpm install --frozen-lockfile`. Use Node.js 22.18+ ou 24.
 3. Em **Settings → Environment Variables** do projeto Vercel, configure no servidor:
    - `OPENAI_API_KEY`: sua chave da API OpenAI com acesso a um modelo de visão e créditos disponíveis.
    - `BURACO_ACCESS_CODE`: uma senha escolhida por você, de 12 a 256 caracteres, compartilhada somente com sua mesa.
@@ -107,3 +107,7 @@ Em Rodada em andamento, cada participante tem o botão Fotografar mão, junto do
 A IA identifica as cartas; você pode corrigir valores e naipes, remover extras e adicionar faltantes. A mão não precisa formar jogos: uma carta é válida e não há bônus de canastra. O desconto usa os valores individuais configurados em Regras e valores. Naipe desconhecido não impede o desconto se o valor estiver definido. Ao confirmar, o total substitui o desconto anterior deste participante, sem acumular e sem alterar os jogos da mesa, a batida ou o morto. Você ainda pode editar o total manualmente.
 
 Validação: compilação de produção, 19 testes automatizados e fluxo de navegador com IA simulada: corrigir, adicionar e remover cartas; substituir desconto manual de 80 por 50; repetir foto mantendo desconto de 50; fechar rodada com −50 para uma dupla e +100 de batida para outra. O reconhecimento com fotos reais continua dependendo do serviço de IA configurado na Vercel.
+
+
+Na Vercel, a instalação foi alinhada ao pnpm-lock.yaml via vercel.json (pnpm install --frozen-lockfile), evitando a falha de npm ao reutilizar cache do pnpm. Somente o script de instalação do esbuild é autorizado nas dependências.
+

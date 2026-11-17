@@ -6,7 +6,7 @@ React + TypeScript + Vite, com função de reconhecimento por IA para Vercel e s
 
 - Duas opções: fotografar a mesa da dupla ou lançar as cartas manualmente.
 - Câmera traseira no celular, com opção de escolher foto da galeria. A abertura direta da câmera depende do navegador; no computador normalmente aparece o seletor de arquivo.
-- A foto é reduzida no aparelho antes do envio. Ao tocar em Reconhecer foto, ela é enviada ao serviço de IA para identificação.
+- A foto é reduzida no aparelho. Por padrão, a opção experimental “No aparelho” executa um modelo local. A foto só é enviada ao Google se você escolher Gemini.
 - O site mostra cartas e agrupamentos detectados; valores incertos aparecem destacados ou como `?`.
 - Na revisão, você pode corrigir valor, naipe e uso do coringa, adicionar cartas faltantes, remover cartas extras, mover cartas entre jogos e adicionar/remover jogos.
 - Pontos são recalculados durante a correção. Jogos inválidos ou cartas desconhecidas impedem a confirmação.
@@ -62,7 +62,7 @@ npm run preview
 - Lavadeira de ases: mínimo 3 cartas; 3–6 sem bônus; 7+ limpa +200 ou suja +100; nunca real, mesmo com 13+.
 - Real: A–K natural, mesmo naipe, bônus +500. Pelos valores padrão, cartas = 110 e total = 610.
 - Sequências: 3–13 cartas, mesmo naipe natural e sem repetição; lacunas precisam ser cobertas por coringas. Ás baixo ou alto, sem volta K–A–2.
-- O 2 pode ser natural ou substituto; Joker sempre substituto. A função do 2 sugerida pela IA também precisa de conferência.
+- 2 e Joker entram como substitutos por padrão; o 2 pode ser alterado para natural. A função do 2 sugerida pela IA também precisa de conferência.
 - Valores recuperados do histórico: Ás 15, Joker 20, bônus limpa 200/suja 100/real 500.
 - Outros padrões ajustáveis: 2 = 10; 3–7 = 5; 8–K = 10; batida +100; morto não pego −100. Pontos da mão podem ser digitados ou preenchidos por foto com revisão.
 - Total da rodada = cartas + bônus + batida − morto não pego − mão.
@@ -119,3 +119,16 @@ Na Vercel, a instalação foi alinhada ao pnpm-lock.yaml via vercel.json (pnpm i
 A API de foto agora chama apenas o Gemini com GEMINI_API_KEY, tanto para a mesa quanto para a mão. OPENAI_API_KEY não é mais usada. O código da mesa existente (BURACO_ACCESS_CODE) continua válido. Para ativar, configure GEMINI_API_KEY na Vercel e faça Redeploy. Não use prefixo VITE_ para chaves. O modelo pode ser alterado no servidor por GEMINI_MODEL; padrão gemini-3.5-flash-lite. Quando o limite do Google for atingido, o app mostra o erro e mantém o modo manual, sem trocar automaticamente para um serviço pago.
 
 Validação da migração: 22 testes automatizados, verificação TypeScript e compilação de produção. Testes cobrem imagem inline, JSON Schema, mesa/mão, cota zero/diária, chave inválida, bloqueio e respostas incompletas. Nenhuma chamada real ao Google foi executada antes da configuração da chave; a precisão com fotos reais ainda precisa ser testada na conta do usuário.
+
+
+## Leitura local experimental
+
+A opção padrão “No aparelho” usa ONNX Runtime Web 1.22.0 (MIT) em Web Worker, com um único thread WASM para compatibilidade sem isolamento entre origens. Não chama /api/detect, não requer chave nem código da mesa e não envia imagens ao serviço de inferência. Requer HTTPS ou localhost, Worker, createImageBitmap e OffscreenCanvas. O primeiro uso baixa o motor do jsDelivr e um modelo de 38.233.687 bytes do Hugging Face. Há cache do modelo quando permitido; isso não promete funcionamento totalmente offline. Cancelar termina o worker.
+
+Modelo: [LGD Cards Gen 3, TechTools](https://huggingface.co/sroot/lgd-cards-gen3/tree/b2e9e89cc0138a70fc3ac5661922f99b4e3ae135), revisão fixa b2e9e89cc0138a70fc3ac5661922f99b4e3ae135, SHA-256 8b767cdfed2c8e954a9134013ac3d2f2c53be048768d559675be01277a8a8fd1. Pesos AGPL-3.0; pesos de origem best.pt, configuração e dados de treinamento disponíveis no repositório do autor. Os pesos não foram alterados. O site contém links para esses arquivos e para seu próprio código público. ONNX Runtime: https://onnxruntime.ai/docs/get-started/with-javascript/web.html.
+
+O modelo detecta os símbolos dos cantos, não os limites completos de cada carta. Fotografe um jogo por vez, sem mostrar os dois cantos da mesma carta. Não mesclamos automaticamente cantos distantes de mesmo valor porque Buraco usa cartas repetidas. Assim, uma carta com dois cantos expostos pode aparecer duas vezes e precisa ser corrigida. Coringas impressos não são reconhecidos. 2 entra como coringa por padrão e pode ser desmarcado na revisão; Joker sempre é coringa. As cartas aparecem em um único grupo, com marcadores na foto; mova para outros jogos quando necessário. Todos os resultados locais ficam marcados para conferência. O placar só muda após revisão e confirmação explícita. Sem promessa de precisão em aparelhos ou baralhos ainda não testados.
+
+O seletor de naipe manual tem alvo de toque de 56 px; na revisão, seletores têm mínimo de 48 px.
+
+Validação da leitura local: 26 testes automatizados aprovados, TypeScript e compilação de produção. ONNX real carregado no navegador e executado sobre recorte da foto fornecida: 13 sugestões, incluindo falhas de classificação, omissões e cantos repetidos. É uma demonstração funcional, não validação de precisão. A captura de tela inteira retornou zero cartas; use uma foto próxima apenas das cartas. Conferência de navegador: 2 e Joker marcados como coringa por padrão, 2 natural disponível ao desmarcar, Joker continua coringa. Seletor manual medido em 108 × 60 px. Teste físico em celular ainda pendente.

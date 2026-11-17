@@ -55,3 +55,24 @@ test('Foto da mão usa instruções próprias e preserva cartas sem montar jogos
  const result=await call(handler,{body:{image,purpose:'hand'}});assert.equal(result.statusCode,200);assert.equal(result.body.groups[0].cards[0].rank,'K');
  assert.equal((await call(handler,{body:{image,purpose:'other'}})).statusCode,400);assert.equal(calls,1);
 });
+test('Distingue falta de créditos/cota de limite temporário sem revelar mensagem bruta',async()=>{
+ const cases=[
+  ['credit_balance_exhausted','insufficient_quota','AI_CREDITS',/sem créditos/],
+  ['insufficient_quota','insufficient_quota','AI_QUOTA',/falta de cota/],
+  ['organization_usage_limit_exceeded','insufficient_quota','AI_SPEND_LIMIT',/limite de gastos/],
+  ['rate_limit_exceeded','rate_limit_error','AI_RATE_LIMIT',/temporário/],
+  ['slow_down','rate_limit_error','AI_RATE_LIMIT',/temporário/],
+  ['unknown','unknown','AI_USAGE_LIMIT',/não detalhou/]
+ ];
+ for(const [code,type,expected,message] of cases){
+  const handler=createHandler({env,fetchImpl:async()=>({ok:false,status:429,json:async()=>({error:{code,type,message:'SECRET-DO-NOT-EXPOSE'}})})});
+  const response=await call(handler);assert.equal(response.statusCode,429);assert.equal(response.body.code,expected);assert.match(response.body.error,message);assert.doesNotMatch(JSON.stringify(response.body),/SECRET/);
+  if(expected==='AI_QUOTA'||expected==='AI_CREDITS')assert.doesNotMatch(response.body.error,/Aguarde um pouco/);
+ }
+});
+test('Trata chave rejeitada, acesso ao modelo e erro sem JSON com mensagens seguras',async()=>{
+ for(const [status,expected] of [[401,'AI_KEY'],[403,'AI_ACCESS'],[404,'AI_ACCESS'],[500,'AI_UNAVAILABLE']]){
+  const response=await call(createHandler({env,fetchImpl:async()=>({ok:false,status,json:async()=>{throw new Error('Invalid JSON');}})}));assert.equal(response.statusCode,502);assert.equal(response.body.code,expected);
+ }
+ const response=await call(createHandler({env,fetchImpl:async()=>({ok:false,status:429,json:async()=>{throw new Error();}})}));assert.equal(response.body.code,'AI_USAGE_LIMIT');
+});

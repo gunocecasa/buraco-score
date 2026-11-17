@@ -1,4 +1,4 @@
-import {decodeCards} from './localVisionCore';
+import {decodeCards,scanWindows,aceWindow,mergePasses,type ScanWindow,type CardBox} from './localVisionCore';
 
 const MODEL='https://huggingface.co/sroot/lgd-cards-gen3/resolve/b2e9e89cc0138a70fc3ac5661922f99b4e3ae135/model.onnx';
 const HASH='8b767cdfed2c8e954a9134013ac3d2f2c53be048768d559675be01277a8a8fd1';
@@ -16,7 +16,7 @@ async function download():Promise<ArrayBuffer>{
  try{await cache?.put(MODEL,new Response(data));}catch{/* Low storage does not prevent this analysis. */}
  return data;
 }
-self.onmessage=async(event:MessageEvent<{image:ImageBitmap}>)=>{
+self.onmessage=async(event:MessageEvent<{image:ImageBitmap;detailed:boolean}>)=>{
  const image=event.data.image;
  let session:any,input:any;
  try{
@@ -30,18 +30,32 @@ self.onmessage=async(event:MessageEvent<{image:ImageBitmap}>)=>{
   session=await ort.InferenceSession.create(model,{executionProviders:['wasm'],graphOptimizationLevel:'all'});
   const canvas=new OffscreenCanvas(640,640),ctx=canvas.getContext('2d');
   if(!ctx)throw new Error('Não foi possível preparar a imagem.');
-  const width=image.width,height=image.height,scale=Math.min(640/width,640/height);
-  ctx.fillStyle='rgb(114,114,114)';ctx.fillRect(0,0,640,640);
-  ctx.drawImage(image,(640-width*scale)/2,(640-height*scale)/2,width*scale,height*scale);
-  image.close();
-  const pixels=ctx.getImageData(0,0,640,640).data,values=new Float32Array(3*640*640);
-  for(let i=0;i<640*640;i++){values[i]=pixels[4*i]/255;values[640*640+i]=pixels[4*i+1]/255;values[2*640*640+i]=pixels[4*i+2]/255;}
-  input=new ort.Tensor('float32',values,[1,3,640,640]);
-  progress('Lendo valores e naipes no aparelho…');
-  const output=await session.run({[session.inputNames[0]]:input});
-  const tensor=output[session.outputNames[0]];
-  const boxes=decodeCards(tensor.data,tensor.dims,width,height);
-  for(const value of Object.values(output) as any[])value.dispose?.();
+  const width=image.width,height=image.height;
+  async function scan(window:ScanWindow):Promise<CardBox[]>{
+   const context=ctx!;const scale=Math.min(640/window.width,640/window.height);
+   context.fillStyle='rgb(114,114,114)';context.fillRect(0,0,640,640);
+   context.drawImage(image,window.x,window.y,window.width,window.height,(640-window.width*scale)/2,(640-window.height*scale)/2,window.width*scale,window.height*scale);
+   const pixels=context.getImageData(0,0,640,640).data,values=new Float32Array(3*640*640);
+   for(let i=0;i<640*640;i++){values[i]=pixels[4*i]/255;values[640*640+i]=pixels[4*i+1]/255;values[2*640*640+i]=pixels[4*i+2]/255;}
+   input=new ort.Tensor('float32',values,[1,3,640,640]);
+   const output=await session.run({[session.inputNames[0]]:input});
+   try{
+    const tensor=output[session.outputNames[0]];
+    return decodeCards(tensor.data,tensor.dims,window.width,window.height)
+     .filter(box=>(window.x===0||box.x>3)&&(window.y===0||box.y>3)&&(window.x+window.width>=width||box.x+box.width<window.width-3)&&(window.y+window.height>=height||box.y+box.height<window.height-3))
+     .map(box=>({...box,x:box.x+window.x,y:box.y+window.y}));
+   }finally{input.dispose();input=null;for(const value of Object.values(output) as any[])value.dispose?.();}
+  }
+  const windows=scanWindows(width,height,event.data.detailed),passes:CardBox[][]=[];
+  for(let i=0;i<windows.length;i++){
+   progress(`Lendo ${i===0?'foto inteira':'recorte ampliado'} · ${i+1} de ${windows.length}…`);
+   passes.push(await scan(windows[i]));
+  }
+  if(event.data.detailed){
+   const focus=aceWindow(mergePasses(passes),width,height);
+   if(focus){progress('Conferindo a região dos ases ampliada…');passes.push(await scan(focus));}
+  }
+  const boxes=mergePasses(passes);
   self.postMessage({type:'result',boxes});
  }catch(error){self.postMessage({type:'error',message:error instanceof Error?error.message:'Falha na leitura local.'});}
  finally{image.close();input?.dispose?.();await session?.release?.();}

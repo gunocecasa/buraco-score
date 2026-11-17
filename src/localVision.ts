@@ -1,5 +1,5 @@
 import type {CardBox} from './localVisionCore';
-export async function recognizeLocally(image:string,signal:AbortSignal,onProgress:(message:string)=>void):Promise<CardBox[]>{
+export async function recognizeLocally(image:string,signal:AbortSignal,onProgress:(message:string)=>void,detailed=true):Promise<CardBox[]>{
  if(!globalThis.Worker||!globalThis.createImageBitmap)throw new Error('Atualize seu navegador para usar a leitura local. O preenchimento manual continua disponível.');
  const bitmap=await createImageBitmap(await(await fetch(image)).blob());
  if(signal.aborted){bitmap.close();throw new DOMException('Cancelado','AbortError');}
@@ -15,6 +15,6 @@ export async function recognizeLocally(image:string,signal:AbortSignal,onProgres
    if(event.data.type==='error'){stop();reject(new Error(event.data.message));}
   };
   worker.onerror=()=>{stop();reject(new Error('Não foi possível iniciar o leitor no aparelho. Confira a conexão, atualize o navegador ou use o preenchimento manual.'));};
-  worker.postMessage({image:bitmap},[bitmap]);
+  worker.postMessage({image:bitmap,detailed},[bitmap]);
  });
 }

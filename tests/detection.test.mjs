@@ -94,3 +94,8 @@ test('Distingue cota diária, cota zero, chave inválida e indisponibilidade sem
  }
  const response=await call(createHandler({env,fetchImpl:async()=>({ok:false,status:429,json:async()=>{throw new Error('bad JSON');}})}));assert.equal(response.body.code,'GEMINI_RATE_LIMIT');
 });
+
+test('Diagnóstico privado remove chaves senha e sequências longas sem revelar mensagem ao cliente',async()=>{
+ const logs=[];const handler=createHandler({env,logger:(...args)=>logs.push(args.join(' ')),fetchImpl:async()=>({ok:false,status:400,json:async()=>({error:{status:'INVALID_ARGUMENT',message:'Unsupported field responseSchema '+env.GEMINI_API_KEY+' '+env.BURACO_ACCESS_CODE+' '+'A'.repeat(120)}})})});
+ const response=await call(handler);assert.equal(response.body.code,'GEMINI_REQUEST');assert.equal(logs.length,1);assert.match(logs[0],/Unsupported field responseSchema/);assert.ok(!logs[0].includes(env.GEMINI_API_KEY));assert.ok(!logs[0].includes(env.BURACO_ACCESS_CODE));assert.ok(!logs[0].includes('A'.repeat(120)));assert.doesNotMatch(JSON.stringify(response.body),/Unsupported field/);
+});
